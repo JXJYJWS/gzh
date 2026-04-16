@@ -1,0 +1,25 @@
+// 本地开发用这个 schema
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Article {
+  id           String   @id @default(cuid())
+  accountName  String
+  title        String
+  url          String   @unique
+  publishTime  DateTime
+  readCount    Int?
+  likeCount    Int?
+  collectCount Int?
+  lookingCount Int?
+  shareCount   Int?
+  commentCount Int?
+  createdAt    DateTime @default(now())
+  @@index([accountName, publishTime])
+}

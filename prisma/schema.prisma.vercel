@@ -1,0 +1,27 @@
+// Vercel 部署用的 Schema (PostgreSQL)
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Article {
+  id           String   @id @default(cuid())
+  accountName  String
+  title        String
+  url          String   @unique
+  publishTime  DateTime
+  readCount    Int?
+  likeCount    Int?
+  collectCount Int?
+  lookingCount Int?
+  shareCount   Int?
+  commentCount Int?
+  createdAt    DateTime @default(now())
+  @@index([accountName, publishTime])
+}
