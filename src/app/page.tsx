@@ -50,6 +50,36 @@ export default function HomePage() {
   const [accountLoading, setAccountLoading] = useState(false)
   const [accountResults, setAccountResults] = useState<Article[]>([]) // 公众号搜索的临时结果
 
+  // 视频号相关状态
+  const [videoId, setVideoId] = useState('')
+  const [videoMetrics, setVideoMetrics] = useState<{
+    comment_count: number
+    like_count: number
+    forward_count: number
+    fav_count: number
+    data_version: number
+  } | null>(null)
+  const [videoLoading, setVideoLoading] = useState(false)
+  const [videoError, setVideoError] = useState('')
+
+  // 视频号作品列表状态
+  const [videoListId, setVideoListId] = useState('')
+  const [videoList, setVideoList] = useState<any[]>([])
+  const [videoListLoading, setVideoListLoading] = useState(false)
+  const [videoListError, setVideoListError] = useState('')
+  const [videoListMeta, setVideoListMeta] = useState<{
+    feeds_count: number
+    original_count: number
+    last_buffer: string
+    continue_flag: number
+  } | null>(null)
+
+  // 视频号搜索状态
+  const [videoSearchKeyword, setVideoSearchKeyword] = useState('')
+  const [videoSearchResults, setVideoSearchResults] = useState<any[]>([])
+  const [videoSearchLoading, setVideoSearchLoading] = useState(false)
+  const [videoSearchError, setVideoSearchError] = useState('')
+
   // 时间范围筛选
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
@@ -276,6 +306,120 @@ export default function HomePage() {
     } finally {
       if (loadMore) setLoadingMore(false)
       else setSearchLoading(false)
+    }
+  }
+
+  // 获取视频号互动数据
+  const handleGetVideoMetrics = async () => {
+    if (!videoId.trim()) return
+
+    setVideoLoading(true)
+    setVideoError('')
+    setVideoMetrics(null)
+
+    try {
+      const res = await fetch('/api/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectId: videoId.trim() }),
+      })
+      const data = await res.json()
+
+      if (data.error) {
+        setVideoError(data.error)
+      } else if (data.code === 0) {
+        setVideoMetrics(data.count_info)
+        setBalance(data.remain_money)
+      } else {
+        setVideoError(data.msg || `错误码: ${data.code}`)
+      }
+    } catch (e: unknown) {
+      setVideoError((e as Error).message)
+    } finally {
+      setVideoLoading(false)
+    }
+  }
+
+  // 获取视频号作品列表
+  const handleGetVideoList = async (loadMore = false) => {
+    if (!videoListId.trim() && !loadMore) return
+
+    setVideoListLoading(true)
+    setVideoListError('')
+
+    try {
+      const res = await fetch('/api/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'list',
+          v2Name: videoListId.trim(),
+          lastBuffer: loadMore ? (videoListMeta?.last_buffer || '') : ''
+        }),
+      })
+      const data = await res.json()
+
+      if (data.error) {
+        setVideoListError(data.error)
+      } else if (data.code === 0) {
+        if (loadMore) {
+          setVideoList(prev => [...prev, ...(data.object || [])])
+        } else {
+          setVideoList(data.object || [])
+        }
+        setVideoListMeta({
+          feeds_count: data.feeds_count,
+          original_count: data.original_count,
+          last_buffer: data.last_buffer,
+          continue_flag: data.continue_flag
+        })
+        setBalance(data.remain_money)
+      } else {
+        setVideoListError(data.msg || `错误码: ${data.code}`)
+      }
+    } catch (e: unknown) {
+      setVideoListError((e as Error).message)
+    } finally {
+      setVideoListLoading(false)
+    }
+  }
+
+  // 搜索视频号
+  const handleSearchVideoAccount = async () => {
+    const keyword = videoSearchKeyword.trim()
+    if (!keyword) return
+
+    setVideoSearchLoading(true)
+    setVideoSearchError('')
+    setVideoSearchResults([])
+
+    try {
+      const res = await fetch('/api/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'search',
+          keyword: keyword
+        }),
+      })
+      const data = await res.json()
+
+      if (data.error) {
+        setVideoSearchError(data.error)
+      } else if (data.code === 0) {
+        const results = Array.isArray(data.v2_info_list) ? data.v2_info_list : []
+        setVideoSearchResults(results)
+        if (data.remain_money !== undefined) {
+          setBalance(data.remain_money)
+        }
+      } else {
+        setVideoSearchError(data.msg || `错误码: ${data.code}`)
+      }
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : '请求失败'
+      setVideoSearchError(errorMessage)
+    } finally {
+      setVideoSearchLoading(false)
     }
   }
 
@@ -686,6 +830,179 @@ export default function HomePage() {
             </CardContent>
           </Card>
         )}
+
+        {/* 视频号专区 */}
+        <Card className="mb-6 bg-gradient-to-r from-[#FFF8F0] to-white border-[#6B9B7A]/20">
+          <CardContent className="pt-4">
+            <div className="space-y-4">
+              {/* 搜索视频号 */}
+              <div className="bg-white rounded-lg p-4 border border-[#E8E4DA]">
+                <div className="flex items-center gap-2 mb-3">
+                  <span>🔍</span>
+                  <span className="font-semibold text-[#2D2A26]">搜索视频号</span>
+                  <span className="text-xs text-[#6B6560]">输入名字查找</span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Input
+                    placeholder="输入视频号名字 (如: 人民日报)"
+                    value={videoSearchKeyword}
+                    onChange={e => setVideoSearchKeyword(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchVideoAccount()}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSearchVideoAccount} disabled={videoSearchLoading} variant="outline">
+                    {videoSearchLoading ? '搜索中...' : '搜索'}
+                  </Button>
+                </div>
+                {videoSearchError && (
+                  <div className="text-sm text-red-500 mt-2">{videoSearchError}</div>
+                )}
+                {videoSearchResults.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {videoSearchResults.map((item: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#FFF8F0] transition-colors cursor-pointer" onClick={() => { setVideoListId(item.contact?.username || ''); setVideoSearchResults([]) }}>
+                        <div>
+                          <div className="font-medium text-[#2D2A26]">{item.contact?.nickname || '未知'}</div>
+                          <div className="text-xs text-[#6B6560]">{item.contact?.signature || '无简介'}</div>
+                          {item.contact?.ext_info && (
+                            <div className="text-xs text-[#D97757]">IP属地: {item.contact.ext_info}</div>
+                          )}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setVideoListId(item.contact?.username || ''); handleGetVideoList() }}>
+                          查看作品
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="text-xs text-[#6B6560] mt-2">💡 每次搜索消耗 ¥0.5</div>
+              </div>
+
+              {/* 单个视频数据查询 */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span>🎬</span>
+                  <span className="font-semibold text-[#2D2A26]">单个视频数据</span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Input
+                    placeholder="输入视频 object_id (如: 14462543356698040491)"
+                    value={videoId}
+                    onChange={e => setVideoId(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleGetVideoMetrics()}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleGetVideoMetrics} disabled={videoLoading} variant="outline">
+                    {videoLoading ? '查询中...' : '查询'}
+                  </Button>
+                </div>
+                {videoMetrics && (
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-white rounded-lg p-2 text-center border border-[#E8E4DA]">
+                      <div className="text-xl font-semibold text-[#D97757]">{formatNumber(videoMetrics.like_count)}</div>
+                      <div className="text-xs text-[#6B6560]">❤️ 喜欢</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-center border border-[#E8E4DA]">
+                      <div className="text-xl font-semibold text-[#6B9B7A]">{formatNumber(videoMetrics.fav_count)}</div>
+                      <div className="text-xs text-[#6B6560]">👍 点赞</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-center border border-[#E8E4DA]">
+                      <div className="text-xl font-semibold text-[#7B9DBF]">{formatNumber(videoMetrics.forward_count)}</div>
+                      <div className="text-xs text-[#6B6560]">↗️ 转发</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 text-center border border-[#E8E4DA]">
+                      <div className="text-xl font-semibold text-[#C9A86C]">{formatNumber(videoMetrics.comment_count)}</div>
+                      <div className="text-xs text-[#6B6560]">💬 评论</div>
+                    </div>
+                  </div>
+                )}
+                <div className="text-xs text-[#6B6560] mt-2">💡 每次查询消耗 ¥0.04</div>
+              </div>
+
+              <div className="border-t border-[#E8E4DA] pt-4">
+                {/* 作品列表查询 */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span>📋</span>
+                    <span className="font-semibold text-[#2D2A26]">视频号作品列表</span>
+                    {videoListMeta && (
+                      <span className="text-xs text-[#6B6560]">共 {videoListMeta.feeds_count} 个作品 · {videoListMeta.original_count} 个原创</span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Input
+                      placeholder="输入视频号 v2_name (如: v2_060000231003b20...)"
+                      value={videoListId}
+                      onChange={e => setVideoListId(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleGetVideoList()}
+                      className="flex-1"
+                    />
+                    <Button onClick={() => handleGetVideoList()} disabled={videoListLoading} variant="outline">
+                      {videoListLoading ? '加载中...' : '获取列表'}
+                    </Button>
+                  </div>
+
+                  {/* 作品列表展示 */}
+                  {videoList.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {videoList.map((video, index) => (
+                        <div key={video.object_id || index} className="bg-white rounded-lg p-3 border border-[#E8E4DA]">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={cn(
+                                  'text-xs px-2 py-0.5 rounded-full',
+                                  video.media_type === '直播' ? 'bg-red-100 text-red-600' :
+                                  video.media_type === '视频' ? 'bg-blue-100 text-blue-600' :
+                                  'bg-green-100 text-green-600'
+                                )}>
+                                  {video.media_type}
+                                </span>
+                                {video.sticky_time && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600">置顶</span>
+                                )}
+                                <span className="text-xs text-[#6B6560]">
+                                  {video.publish_time ? formatDate(new Date(video.publish_time * 1000).toISOString()) : '-'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-[#6B6560] font-mono cursor-pointer hover:text-[#D97757]" onClick={() => { setVideoId(video.object_id); window.scrollTo({ top: 0, behavior: 'smooth' }) }} title="点击复制并查询">ID: {video.object_id}</div>
+                            </div>
+                            <div className="flex gap-3 text-sm">
+                              <span className="text-[#D97757]" title="喜欢数">❤️ {formatNumber(video.like_count)}</span>
+                              <span className="text-[#6B9B7A]" title="点赞数">👍 {formatNumber(video.fav_count)}</span>
+                              <span className="text-[#7B9DBF]" title="转发数">↗️ {formatNumber(video.forward_count)}</span>
+                              <span className="text-[#C9A86C]" title="评论数">💬 {formatNumber(video.comment_count)}</span>
+                            </div>
+                          </div>
+                          {video.video_play_len && (
+                            <div className="text-xs text-[#6B6560] mt-1">
+                              视频长度: {Math.floor(video.video_play_len / 60)}:{String(video.video_play_len % 60).padStart(2, '0')}
+                              {video.file_size && ` · ${(video.file_size / 1024 / 1024).toFixed(1)}MB`}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* 加载更多 */}
+                      {videoListMeta?.continue_flag === 1 && (
+                        <Button onClick={() => handleGetVideoList(true)} disabled={videoListLoading} variant="outline" className="w-full">
+                          {videoListLoading ? '加载中...' : '加载更多'}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-xs text-[#6B6560] mt-2">💡 每次查询消耗 ¥0.2</div>
+                </div>
+              </div>
+
+              {(videoError || videoListError) && (
+                <div className="text-sm text-red-500">{videoError || videoListError}</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Search/Add Section */}
         <Card className="mb-6">
