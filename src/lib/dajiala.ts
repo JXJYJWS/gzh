@@ -132,8 +132,8 @@ export async function batchGetMetrics(items: { id: string; url: string }[]) {
   const results = []
   for (const item of items) {
     try {
-      const data = await getMetrics(item.url) // 使用 Pro 版本获取完整数据
-      results.push({ id: item.id, success: true, data })
+      const res = await getMetrics(item.url) as any
+      results.push({ id: item.id, success: true, data: res.data })
     } catch (e) {
       results.push({ id: item.id, success: false, error: (e as Error).message })
     }
