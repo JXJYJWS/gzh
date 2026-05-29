@@ -96,11 +96,48 @@ export default function HomePage() {
     fetchBalance()
   }, [])
 
-  // 从 localStorage 加载数据
+  // 从数据库加载数据 + 迁移 localStorage 数据
   useEffect(() => {
-    if (searchMode === 'account') {
-      setArticles(getStoredArticles())
+    if (searchMode !== 'account') return
+
+    const loadArticles = async () => {
+      try {
+        const res = await fetch('/api/articles')
+        if (!res.ok) throw new Error('Failed to fetch')
+        const data = await res.json()
+        
+        // 如果数据库为空，尝试迁移 localStorage
+        if (data.length === 0) {
+          const localData = getStoredArticles()
+          if (localData.length > 0) {
+            setMessage('正在迁移本地数据到数据库...')
+            const saveRes = await fetch('/api/articles', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ articles: localData })
+            })
+            if (saveRes.ok) {
+              // 重新获取
+              const refreshed = await fetch('/api/articles')
+              const refreshedData = await refreshed.json()
+              setArticles(refreshedData)
+              setMessage(`已迁移 ${localData.length} 篇文章`)
+              // 清除 localStorage
+              setStoredArticles([])
+            }
+            return
+          }
+        }
+        
+        setArticles(Array.isArray(data) ? data : [])
+      } catch (e) {
+        // 如果数据库加载失败，回退到 localStorage
+        console.error('Database load failed, using localStorage:', e)
+        setArticles(getStoredArticles())
+      }
     }
+
+    loadArticles()
   }, [searchMode])
 
   // 当前显示的文章列表
@@ -228,6 +265,26 @@ export default function HomePage() {
             commentCount: null,
           }))
 
+        // 保存到数据库
+        try {
+          const res = await fetch('/api/articles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ articles: newArticles })
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setMessage(`成功添加 ${data.count} 篇文章`)
+            // 刷新列表
+            const refreshRes = await fetch('/api/articles')
+            if (refreshRes.ok) {
+              const refreshed = await refreshRes.json()
+              setArticles(refreshed)
+            }
+            return // 避免重复设置 message
+          }
+        } catch {}
+        // 失败时回退到 localStorage
         const updated = addStoredArticles(newArticles)
         setArticles(updated)
 
@@ -440,9 +497,30 @@ export default function HomePage() {
     setSaving(true)
     try {
       const articlesToSave = searchResults.filter(a => ids.includes(a.id))
-      const updated = addStoredArticles(articlesToSave)
-      setArticles(updated)
-      setMessage(`成功保存 ${articlesToSave.length} 篇文章`)
+      try {
+        const res = await fetch('/api/articles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ articles: articlesToSave })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setMessage(`成功保存 ${data.count} 篇文章`)
+          // 刷新列表
+          const refreshRes = await fetch('/api/articles')
+          if (refreshRes.ok) {
+            const refreshed = await refreshRes.json()
+            setArticles(refreshed)
+          }
+        } else {
+          throw new Error('Save failed')
+        }
+      } catch {
+        // 失败时回退到 localStorage
+        const updated = addStoredArticles(articlesToSave)
+        setArticles(updated)
+        setMessage(`成功保存 ${articlesToSave.length} 篇文章`)
+      }
       setSelectedIds(new Set())
     } catch (e) {
       setMessage((e as Error).message)
@@ -610,23 +688,33 @@ export default function HomePage() {
       }
 
       if (searchMode === 'account' && accountResults.length > 0) {
-        // 公众号搜索模式 - 更新临时结果
         setAccountResults(prev => prev.map(updateArticle))
       } else if (searchMode === 'account') {
-        // 已存储的文章
+        // 更新数据库
         for (const result of data.results) {
           if (result.success && result.data) {
-            updateStoredArticle(result.id, {
-              readCount: result.data?.data?.read ?? result.data?.read,
-              likeCount: result.data.zan,
-              lookingCount: result.data.looking,
-              shareCount: result.data.share_num,
-              collectCount: result.data.collect_num,
-              commentCount: result.data.comment_count,
-            })
+            try {
+              await fetch('/api/articles/' + result.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  readCount: result.data?.data?.read ?? result.data?.read,
+                  likeCount: result.data.zan,
+                  lookingCount: result.data.looking,
+                  shareCount: result.data.share_num,
+                  collectCount: result.data.collect_num,
+                  commentCount: result.data.comment_count,
+                })
+              })
+            } catch {}
           }
         }
-        setArticles(getStoredArticles())
+        // 刷新列表
+        const refreshRes = await fetch('/api/articles')
+        if (refreshRes.ok) {
+          const refreshed = await refreshRes.json()
+          setArticles(refreshed)
+        }
       } else {
         // 关键词搜索模式
         setSearchResults(prev => prev.map(updateArticle))
