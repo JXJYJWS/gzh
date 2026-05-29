@@ -598,7 +598,7 @@ export default function HomePage() {
         if (result && result.success && result.data) {
           return {
             ...article,
-            readCount: result.data.read,
+            readCount: result.data?.data?.read ?? result.data?.read,
             likeCount: result.data.zan,
             lookingCount: result.data.looking,
             shareCount: result.data.share_num,
@@ -617,7 +617,7 @@ export default function HomePage() {
         for (const result of data.results) {
           if (result.success && result.data) {
             updateStoredArticle(result.id, {
-              readCount: result.data.read,
+              readCount: result.data?.data?.read ?? result.data?.read,
               likeCount: result.data.zan,
               lookingCount: result.data.looking,
               shareCount: result.data.share_num,
