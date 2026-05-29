@@ -640,16 +640,21 @@ export default function HomePage() {
   }
 
   // 一键获取所有阅读量
-  const handleFetchAllMetrics = async () => {
-    if (currentArticles.length === 0) return
+  const handleFetchSelectedMetrics = async () => {
+    const selectedArticles = currentArticles.filter(a => selectedIds.has(a.id) && a.readCount == null)
+    if (selectedArticles.length === 0) {
+      setMessage(selectedIds.size > 0 ? '选中的文章已都有数据' : '请先选择文章')
+      return
+    }
 
+    const estimatedCost = (selectedArticles.length * 0.04).toFixed(2)
     setFetchingAllMetrics(true)
-    setMessage('正在获取阅读量...')
+    setMessage(`正在获取 ${selectedArticles.length} 篇...（约 ¥${estimatedCost}）`)
     try {
       const res = await fetch('/api/dajiala/metrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articles: currentArticles.map(a => ({ id: a.id, url: a.url })) }),
+        body: JSON.stringify({ articles: selectedArticles.map(a => ({ id: a.id, url: a.url })) }),
       })
       const data = await res.json()
       const updatedCount = data.results.filter((r: any) => r.success).length
@@ -694,7 +699,7 @@ export default function HomePage() {
         setSearchResults(prev => prev.map(updateArticle))
       }
 
-      setMessage(`已获取 ${updatedCount}/${currentArticles.length} 篇文章的阅读量`)
+      setMessage(`已获取 ${updatedCount}/${selectedArticles.length} 篇（约 ¥${(updatedCount * 0.04).toFixed(2)}）`)
     } catch (e) {
       setMessage((e as Error).message)
     } finally {
@@ -1188,8 +1193,8 @@ export default function HomePage() {
                       {exporting ? '获取中...' : '导出 TXT(全文)'}
                     </Button>
                     {currentArticles.length > 0 && (
-                      <Button size="sm" onClick={handleFetchAllMetrics} disabled={fetchingAllMetrics} variant="outline">
-                        {fetchingAllMetrics ? '获取中...' : '一键获取阅读量'}
+                      <Button size="sm" onClick={handleFetchSelectedMetrics} disabled={fetchingAllMetrics} variant="outline">
+                        {fetchingAllMetrics ? '获取中...' : selectedIds.size > 0 ? `获取数据 (${selectedIds.size})` : '获取数据'}
                       </Button>
                     )}
                     {searchMode === 'keyword' && accountOptions.length > 1 && (
